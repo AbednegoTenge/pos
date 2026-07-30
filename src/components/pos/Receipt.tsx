@@ -3,6 +3,7 @@ import { formatGHS } from '@/lib/currency'
 import { PAYMENT_LABELS } from '@/lib/payment'
 import type { TaxBreakdown } from '@/lib/tax'
 import type { BusinessSettings, CartLine, PaymentMethod } from '@/types/db'
+import { cartLineKey, cartLineUnitLabel, cartLineUnitPrice } from '@/lib/cartLine'
 
 interface ReceiptProps {
   receiptNo: string
@@ -11,11 +12,12 @@ interface ReceiptProps {
   totals: TaxBreakdown
   paymentMethod: PaymentMethod
   paymentReference: string | null
+  cashGiven?: number | null
   settings: BusinessSettings | null
 }
 
 const Receipt = forwardRef<HTMLDivElement, ReceiptProps>(function Receipt(
-  { receiptNo, createdAt, lines, totals, paymentMethod, paymentReference, settings },
+  { receiptNo, createdAt, lines, totals, paymentMethod, paymentReference, cashGiven, settings },
   ref,
 ) {
   return (
@@ -33,11 +35,11 @@ const Receipt = forwardRef<HTMLDivElement, ReceiptProps>(function Receipt(
       </div>
       <div className="border-t border-dashed border-black" />
       {lines.map((line) => (
-        <div key={line.product.id} className="flex justify-between gap-2">
+        <div key={cartLineKey(line)} className="flex justify-between gap-2">
           <span className="flex-1 truncate">
-            {line.product.name} x{line.quantity}
+            {line.product.name} x{line.quantity} {cartLineUnitLabel(line)}
           </span>
-          <span>{formatGHS(line.product.price_ghs * line.quantity)}</span>
+          <span>{formatGHS(cartLineUnitPrice(line) * line.quantity)}</span>
         </div>
       ))}
       <div className="border-t border-dashed border-black" />
@@ -89,6 +91,18 @@ const Receipt = forwardRef<HTMLDivElement, ReceiptProps>(function Receipt(
           <span>Ref</span>
           <span>{paymentReference}</span>
         </div>
+      )}
+      {paymentMethod === 'cash' && cashGiven != null && (
+        <>
+          <div className="flex justify-between">
+            <span>Cash received</span>
+            <span>{formatGHS(cashGiven)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Change</span>
+            <span>{formatGHS(cashGiven - totals.total)}</span>
+          </div>
+        </>
       )}
       <div className="border-t border-dashed border-black" />
       <p className="text-center">{settings?.receipt_footer ?? 'Thank you for your patronage!'}</p>

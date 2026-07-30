@@ -7,6 +7,13 @@ import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { formatGHS } from '@/lib/currency'
 import type { Product } from '@/types/db'
+
+interface UnitFormRow {
+  id?: string
+  label: string
+  conversion_qty: string
+  price_ghs: string
+}
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -55,11 +62,15 @@ export default function InventoryPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Product | null>(null)
   const [form, setForm] = useState(emptyForm)
+  const [units, setUnits] = useState<UnitFormRow[]>([])
+  const [removedUnitIds, setRemovedUnitIds] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
 
   function openCreate() {
     setEditing(null)
     setForm(emptyForm)
+    setUnits([])
+    setRemovedUnitIds([])
     setDialogOpen(true)
   }
 
@@ -77,7 +88,32 @@ export default function InventoryPage() {
       stock_qty: String(product.stock_qty),
       low_stock_threshold: String(product.low_stock_threshold),
     })
+    setUnits(
+      (product.product_units ?? []).map((pu) => ({
+        id: pu.id,
+        label: pu.label,
+        conversion_qty: String(pu.conversion_qty),
+        price_ghs: String(pu.price_ghs),
+      })),
+    )
+    setRemovedUnitIds([])
     setDialogOpen(true)
+  }
+
+  function addUnitRow() {
+    setUnits((u) => [...u, { label: '', conversion_qty: '', price_ghs: '' }])
+  }
+
+  function updateUnitRow(index: number, patch: Partial<UnitFormRow>) {
+    setUnits((u) => u.map((row, i) => (i === index ? { ...row, ...patch } : row)))
+  }
+
+  function removeUnitRow(index: number) {
+    setUnits((u) => {
+      const row = u[index]
+      if (row.id) setRemovedUnitIds((ids) => [...ids, row.id!])
+      return u.filter((_, i) => i !== index)
+    })
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -97,12 +133,39 @@ export default function InventoryPage() {
       low_stock_threshold: Number(form.low_stock_threshold),
     }
 
-    const { error } = editing
-      ? await supabase.from('products').update(payload).eq('id', editing.id)
-      : await supabase.from('products').insert(payload)
+    const { data: productRow, error } = editing
+      ? await supabase.from('products').update(payload).eq('id', editing.id).select('id').single()
+      : await supabase.from('products').insert(payload).select('id').single()
 
-    if (error) {
-      toast.error(error.message)
+    if (error || !productRow) {
+      toast.error(error?.message ?? 'Failed to save product')
+      setSaving(false)
+      return
+    }
+
+    const validUnits = units.filter((u) => u.label.trim())
+    const unitsError = (
+      await Promise.all([
+        removedUnitIds.length > 0
+          ? supabase.from('product_units').update({ is_active: false }).in('id', removedUnitIds)
+          : Promise.resolve({ error: null }),
+        ...validUnits.map((u) => {
+          const unitPayload = {
+            product_id: productRow.id,
+            label: u.label.trim(),
+            conversion_qty: Number(u.conversion_qty),
+            price_ghs: Number(u.price_ghs),
+            is_active: true,
+          }
+          return u.id
+            ? supabase.from('product_units').update(unitPayload).eq('id', u.id)
+            : supabase.from('product_units').insert(unitPayload)
+        }),
+      ])
+    ).find((r) => r.error)?.error
+
+    if (unitsError) {
+      toast.error(unitsError.message)
     } else {
       toast.success(editing ? 'Product updated' : 'Product added')
       setDialogOpen(false)
@@ -162,7 +225,15 @@ export default function InventoryPage() {
             )}
             {products.map((product) => (
               <TableRow key={product.id}>
-                <TableCell className="font-medium">{product.name}</TableCell>
+                <TableCell className="font-medium">
+                  {product.name}
+                  {product.product_units && product.product_units.length > 0 && (
+                    <Badge variant="secondary" className="ml-2 text-[10px]">
+                      +{product.product_units.length} packaging
+                      {product.product_units.length > 1 ? 's' : ''}
+                    </Badge>
+                  )}
+                </TableCell>
                 <TableCell className="text-muted-foreground">{product.sku ?? '—'}</TableCell>
                 <TableCell>{formatGHS(product.price_ghs)}</TableCell>
                 <TableCell>
@@ -264,6 +335,61 @@ export default function InventoryPage() {
               />
               VAT-exempt item
             </label>
+
+            <div className="col-span-2 space-y-2 border-t pt-4">
+              <div className="flex items-center justify-between">
+                <Label>Other packagings</Label>
+                <Button type="button" size="sm" variant="outline" onClick={addUnitRow}>
+                  <Plus className="size-3" />
+                  Add packaging
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                E.g. a "Box of 24" sold on top of the {form.unit || 'base unit'} above — selling
+                one deducts {form.unit || 'base unit'}s from the same stock count.
+              </p>
+              {units.map((row, i) => (
+                <div key={row.id ?? i} className="flex items-end gap-2">
+                  <div className="flex-1 space-y-1">
+                    <Label className="text-xs">Label</Label>
+                    <Input
+                      value={row.label}
+                      onChange={(e) => updateUnitRow(i, { label: e.target.value })}
+                      placeholder="Box of 24"
+                    />
+                  </div>
+                  <div className="w-24 space-y-1">
+                    <Label className="text-xs">= {form.unit || 'units'}</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={row.conversion_qty}
+                      onChange={(e) => updateUnitRow(i, { conversion_qty: e.target.value })}
+                    />
+                  </div>
+                  <div className="w-28 space-y-1">
+                    <Label className="text-xs">Price (GHS)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={row.price_ghs}
+                      onChange={(e) => updateUnitRow(i, { price_ghs: e.target.value })}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="text-destructive"
+                    onClick={() => removeUnitRow(i)}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
 
             <DialogFooter className="col-span-2">
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>

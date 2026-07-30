@@ -10,8 +10,9 @@ export function useProducts() {
     setLoading(true)
     const { data } = await supabase
       .from('products')
-      .select('*')
+      .select('*, product_units(*)')
       .eq('is_active', true)
+      .eq('product_units.is_active', true)
       .order('name')
     setProducts(data ?? [])
     setLoading(false)

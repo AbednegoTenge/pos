@@ -24,7 +24,7 @@ interface PaymentDialogProps {
   open: boolean
   total: number
   onClose: () => void
-  onConfirm: (method: PaymentMethod, reference: string | null) => void
+  onConfirm: (method: PaymentMethod, reference: string | null, cashGiven: number | null) => void
   submitting: boolean
 }
 
@@ -96,7 +96,7 @@ export default function PaymentDialog({ open, total, onClose, onConfirm, submitt
             Cancel
           </Button>
           <Button
-            onClick={() => onConfirm(method, reference || null)}
+            onClick={() => onConfirm(method, reference || null, method === 'cash' && cashGiven ? Number(cashGiven) : null)}
             disabled={
               submitting ||
               (method === 'cash' && change !== null && change < 0) ||

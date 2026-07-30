@@ -1,5 +1,6 @@
 import type { BusinessSettings, CartLine } from '@/types/db'
 import { roundMoney } from '@/lib/currency'
+import { cartLineUnitPrice } from '@/lib/cartLine'
 
 export interface TaxBreakdown {
   subtotal: number
@@ -27,11 +28,11 @@ export function computeSaleTotals(
   >,
 ): TaxBreakdown {
   const subtotal = roundMoney(
-    lines.reduce((sum, line) => sum + line.product.price_ghs * line.quantity, 0),
+    lines.reduce((sum, line) => sum + cartLineUnitPrice(line) * line.quantity, 0),
   )
   const taxableSubtotal = lines
     .filter((line) => !line.product.vat_exempt)
-    .reduce((sum, line) => sum + line.product.price_ghs * line.quantity, 0)
+    .reduce((sum, line) => sum + cartLineUnitPrice(line) * line.quantity, 0)
 
   // Spread the flat discount proportionally across taxable vs. exempt goods.
   const discountOnTaxable = subtotal > 0 ? discount * (taxableSubtotal / subtotal) : 0

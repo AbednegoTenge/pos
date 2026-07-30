@@ -10,7 +10,14 @@ import { computeSaleTotals } from '@/lib/tax'
 import { formatGHS } from '@/lib/currency'
 import { generateReceiptNo } from '@/lib/receipt'
 import { queueSale } from '@/lib/offlineQueue'
-import type { CartLine, PaymentMethod } from '@/types/db'
+import {
+  cartLineBaseQty,
+  cartLineConversionQty,
+  cartLineKey,
+  cartLineUnitLabel,
+  cartLineUnitPrice,
+} from '@/lib/cartLine'
+import type { CartLine, PaymentMethod, Product, ProductUnit } from '@/types/db'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -33,6 +40,7 @@ export default function CheckoutPage() {
   const [search, setSearch] = useState('')
   const [cart, setCart] = useState<CartLine[]>([])
   const [discount, setDiscount] = useState(0)
+  const [unitPickerProduct, setUnitPickerProduct] = useState<Product | null>(null)
   const [paymentOpen, setPaymentOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [completedSale, setCompletedSale] = useState<{
@@ -42,6 +50,7 @@ export default function CheckoutPage() {
     totals: ReturnType<typeof computeSaleTotals>
     paymentMethod: PaymentMethod
     paymentReference: string | null
+    cashGiven: number | null
   } | null>(null)
 
   const receiptRef = useRef<HTMLDivElement>(null)
@@ -70,40 +79,60 @@ export default function CheckoutPage() {
     [cart, discount, settings],
   )
 
-  function addToCart(product: (typeof products)[number]) {
+  function handleProductClick(product: Product) {
+    if (product.product_units && product.product_units.length > 0) {
+      setUnitPickerProduct(product)
+      return
+    }
+    addToCart(product, null)
+  }
+
+  function addToCart(product: Product, productUnit: ProductUnit | null) {
     setCart((prev) => {
-      const existing = prev.find((l) => l.product.id === product.id)
-      if (existing) {
-        if (existing.quantity + 1 > product.stock_qty) {
-          toast.warning(`Only ${product.stock_qty} ${product.unit} of ${product.name} in stock`)
-          return prev
-        }
-        return prev.map((l) =>
-          l.product.id === product.id ? { ...l, quantity: l.quantity + 1 } : l,
-        )
-      }
-      if (product.stock_qty < 1) {
-        toast.warning(`${product.name} is out of stock`)
+      const key = cartLineKey({ product, productUnit })
+      const conversionQty = productUnit?.conversion_qty ?? 1
+
+      // Stock is a shared pool across all packagings of the same product, so
+      // check total base units already reserved across every line for it.
+      const baseUnitsAlreadyInCart = prev
+        .filter((l) => l.product.id === product.id)
+        .reduce((sum, l) => sum + cartLineBaseQty(l), 0)
+
+      if (baseUnitsAlreadyInCart + conversionQty > product.stock_qty) {
+        toast.warning(`Only ${product.stock_qty} ${product.unit} of ${product.name} in stock`)
         return prev
       }
-      return [...prev, { product, quantity: 1 }]
+
+      const existing = prev.find((l) => cartLineKey(l) === key)
+      if (existing) {
+        return prev.map((l) => (cartLineKey(l) === key ? { ...l, quantity: l.quantity + 1 } : l))
+      }
+      return [...prev, { product, productUnit, quantity: 1 }]
     })
   }
 
-  function updateQuantity(productId: string, delta: number) {
+  function updateQuantity(line: CartLine, delta: number) {
+    const key = cartLineKey(line)
     setCart((prev) =>
       prev
-        .map((l) =>
-          l.product.id === productId
-            ? { ...l, quantity: Math.max(0, Math.min(l.quantity + delta, l.product.stock_qty)) }
-            : l,
-        )
+        .map((l) => {
+          if (cartLineKey(l) !== key) return l
+          const conversionQty = cartLineConversionQty(l)
+          const baseUnitsInOtherLines = prev
+            .filter((o) => o.product.id === l.product.id && cartLineKey(o) !== key)
+            .reduce((sum, o) => sum + cartLineBaseQty(o), 0)
+          const maxQuantity = Math.floor(
+            Math.max(0, l.product.stock_qty - baseUnitsInOtherLines) / conversionQty,
+          )
+          return { ...l, quantity: Math.max(0, Math.min(l.quantity + delta, maxQuantity)) }
+        })
         .filter((l) => l.quantity > 0),
     )
   }
 
-  function removeLine(productId: string) {
-    setCart((prev) => prev.filter((l) => l.product.id !== productId))
+  function removeLine(line: CartLine) {
+    const key = cartLineKey(line)
+    setCart((prev) => prev.filter((l) => cartLineKey(l) !== key))
   }
 
   function resetCart() {
@@ -111,7 +140,11 @@ export default function CheckoutPage() {
     setDiscount(0)
   }
 
-  async function handleConfirmPayment(method: PaymentMethod, reference: string | null) {
+  async function handleConfirmPayment(
+    method: PaymentMethod,
+    reference: string | null,
+    cashGiven: number | null,
+  ) {
     setSubmitting(true)
     const receiptNo = generateReceiptNo()
     const createdAt = new Date().toISOString()
@@ -143,10 +176,11 @@ export default function CheckoutPage() {
         cart.map((line) => ({
           sale_id: saleRow.id,
           product_id: line.product.id,
+          product_unit_id: line.productUnit?.id ?? null,
           product_name: line.product.name,
-          unit_price_ghs: line.product.price_ghs,
+          unit_price_ghs: cartLineUnitPrice(line),
           quantity: line.quantity,
-          line_total_ghs: line.product.price_ghs * line.quantity,
+          line_total_ghs: cartLineUnitPrice(line) * line.quantity,
         })),
       )
       if (itemsError) throw itemsError
@@ -174,6 +208,7 @@ export default function CheckoutPage() {
       totals,
       paymentMethod: method,
       paymentReference: reference,
+      cashGiven,
     })
     setPaymentOpen(false)
     setSubmitting(false)
@@ -200,7 +235,7 @@ export default function CheckoutPage() {
             <p className="col-span-full text-muted-foreground">No products found.</p>
           )}
           {filteredProducts.map((product) => (
-            <button key={product.id} type="button" onClick={() => addToCart(product)}>
+            <button key={product.id} type="button" onClick={() => handleProductClick(product)}>
               <Card className="h-full cursor-pointer transition-shadow hover:shadow-md">
                 <CardContent className="flex h-full flex-col justify-between p-3 text-left">
                   <div>
@@ -211,11 +246,18 @@ export default function CheckoutPage() {
                   </div>
                   <div className="mt-2 flex items-center justify-between">
                     <span className="font-semibold">{formatGHS(product.price_ghs)}</span>
-                    {product.stock_qty <= product.low_stock_threshold && (
-                      <Badge variant="destructive" className="text-[10px]">
-                        Low
-                      </Badge>
-                    )}
+                    <div className="flex gap-1">
+                      {product.product_units && product.product_units.length > 0 && (
+                        <Badge variant="secondary" className="text-[10px]">
+                          {product.product_units.length + 1} options
+                        </Badge>
+                      )}
+                      {product.stock_qty <= product.low_stock_threshold && (
+                        <Badge variant="destructive" className="text-[10px]">
+                          Low
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -230,21 +272,21 @@ export default function CheckoutPage() {
             <p className="mt-8 text-center text-sm text-muted-foreground">Cart is empty</p>
           )}
           {cart.map((line) => (
-            <div key={line.product.id} className="flex items-center gap-2 rounded-md border p-2">
+            <div key={cartLineKey(line)} className="flex items-center gap-2 rounded-md border p-2">
               <div className="flex-1">
                 <p className="text-sm font-medium">{line.product.name}</p>
                 <p className="text-xs text-muted-foreground">
-                  {formatGHS(line.product.price_ghs)} × {line.quantity}
+                  {formatGHS(cartLineUnitPrice(line))} × {line.quantity} {cartLineUnitLabel(line)}
                 </p>
               </div>
-              <Button size="icon" variant="outline" className="size-7" onClick={() => updateQuantity(line.product.id, -1)}>
+              <Button size="icon" variant="outline" className="size-7" onClick={() => updateQuantity(line, -1)}>
                 <Minus className="size-3" />
               </Button>
               <span className="w-6 text-center text-sm">{line.quantity}</span>
-              <Button size="icon" variant="outline" className="size-7" onClick={() => updateQuantity(line.product.id, 1)}>
+              <Button size="icon" variant="outline" className="size-7" onClick={() => updateQuantity(line, 1)}>
                 <Plus className="size-3" />
               </Button>
-              <Button size="icon" variant="ghost" className="size-7 text-destructive" onClick={() => removeLine(line.product.id)}>
+              <Button size="icon" variant="ghost" className="size-7 text-destructive" onClick={() => removeLine(line)}>
                 <Trash2 className="size-3" />
               </Button>
             </div>
@@ -291,6 +333,47 @@ export default function CheckoutPage() {
         submitting={submitting}
       />
 
+      <Dialog open={!!unitPickerProduct} onOpenChange={(o) => !o && setUnitPickerProduct(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{unitPickerProduct?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            {unitPickerProduct && (
+              <button
+                type="button"
+                className="w-full rounded-md border p-3 text-left hover:bg-accent"
+                onClick={() => {
+                  addToCart(unitPickerProduct, null)
+                  setUnitPickerProduct(null)
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">Sell by {unitPickerProduct.unit}</span>
+                  <span>{formatGHS(unitPickerProduct.price_ghs)}</span>
+                </div>
+              </button>
+            )}
+            {unitPickerProduct?.product_units?.map((pu) => (
+              <button
+                key={pu.id}
+                type="button"
+                className="w-full rounded-md border p-3 text-left hover:bg-accent"
+                onClick={() => {
+                  addToCart(unitPickerProduct, pu)
+                  setUnitPickerProduct(null)
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">{pu.label}</span>
+                  <span>{formatGHS(pu.price_ghs)}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!completedSale} onOpenChange={(o) => !o && setCompletedSale(null)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
@@ -305,6 +388,7 @@ export default function CheckoutPage() {
               totals={completedSale.totals}
               paymentMethod={completedSale.paymentMethod}
               paymentReference={completedSale.paymentReference}
+              cashGiven={completedSale.cashGiven}
               settings={settings}
             />
           )}

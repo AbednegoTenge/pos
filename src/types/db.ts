@@ -39,6 +39,20 @@ export interface Product {
   is_active: boolean
   created_at: string
   updated_at: string
+  product_units?: ProductUnit[]
+}
+
+// An additional sellable packaging for a product (e.g. "Box of 24" on top of
+// a product tracked/sold individually). conversion_qty is how many base
+// units (product.stock_qty) selling one of this packaging consumes.
+export interface ProductUnit {
+  id: string
+  product_id: string
+  label: string
+  conversion_qty: number
+  price_ghs: number
+  is_active: boolean
+  created_at: string
 }
 
 export interface Sale {
@@ -63,6 +77,7 @@ export interface SaleItem {
   id: string
   sale_id: string
   product_id: string | null
+  product_unit_id: string | null
   product_name: string
   unit_price_ghs: number
   quantity: number
@@ -102,5 +117,6 @@ export interface BusinessSettings {
 
 export interface CartLine {
   product: Product
+  productUnit: ProductUnit | null // null = sold as the base product itself
   quantity: number
 }

@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import type { CartLine, PaymentMethod } from '@/types/db'
 import type { TaxBreakdown } from '@/lib/tax'
+import { cartLineUnitPrice } from '@/lib/cartLine'
 
 const STORAGE_KEY = 'pos.pendingSales'
 
@@ -66,10 +67,11 @@ export async function syncPendingSales(): Promise<{ synced: number; remaining: n
         sale.lines.map((line) => ({
           sale_id: saleRow.id,
           product_id: line.product.id,
+          product_unit_id: line.productUnit?.id ?? null,
           product_name: line.product.name,
-          unit_price_ghs: line.product.price_ghs,
+          unit_price_ghs: cartLineUnitPrice(line),
           quantity: line.quantity,
-          line_total_ghs: line.product.price_ghs * line.quantity,
+          line_total_ghs: cartLineUnitPrice(line) * line.quantity,
         })),
       )
       if (itemsError) throw itemsError

@@ -1,4 +1,15 @@
 {
-  "enabledMcpjsonServers": ["supabase", "shadcn"],
-  "enableAllProjectMcpServers": true
+  "permissions": {
+    "allow": [
+      "mcp__supabase__list_migrations",
+      "mcp__supabase__get_project",
+      "mcp__supabase__list_tables",
+      "mcp__supabase__get_advisors"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "supabase",
+    "shadcn"
+  ]
 }
