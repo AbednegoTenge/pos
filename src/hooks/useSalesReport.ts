@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import type { PaymentMethod } from '@/types/db'
 
 export interface DailyRevenue {
   date: string
@@ -12,12 +13,19 @@ export interface TopProduct {
   quantity: number
 }
 
+export interface PaymentMethodTotal {
+  method: PaymentMethod
+  total: number
+}
+
 export interface SalesReport {
   todayRevenue: number
   todayCount: number
   weekRevenue: number
   dailyRevenue: DailyRevenue[]
   topProducts: TopProduct[]
+  /** Today's completed-sale totals grouped by payment method — for end-of-day till reconciliation. */
+  todayByMethod: PaymentMethodTotal[]
 }
 
 const DAYS = 7
@@ -35,7 +43,7 @@ export function useSalesReport() {
 
       const { data: sales } = await supabase
         .from('sales')
-        .select('id, total_ghs, created_at')
+        .select('id, total_ghs, created_at, payment_method')
         .eq('status', 'completed')
         .gte('created_at', since.toISOString())
 
@@ -51,6 +59,7 @@ export function useSalesReport() {
       let todayCount = 0
       let weekRevenue = 0
       const saleIds: string[] = []
+      const byMethod = new Map<PaymentMethod, number>()
 
       for (const sale of sales ?? []) {
         const key = new Date(sale.created_at).toDateString()
@@ -60,8 +69,13 @@ export function useSalesReport() {
         if (key === todayKey) {
           todayRevenue += sale.total_ghs
           todayCount += 1
+          byMethod.set(sale.payment_method, (byMethod.get(sale.payment_method) ?? 0) + sale.total_ghs)
         }
       }
+
+      const todayByMethod: PaymentMethodTotal[] = Array.from(byMethod.entries())
+        .map(([method, total]) => ({ method, total }))
+        .sort((a, b) => b.total - a.total)
 
       const dailyRevenue: DailyRevenue[] = Array.from(byDay.entries()).map(([date, total]) => ({
         date: new Date(date).toLocaleDateString('en-GH', { weekday: 'short' }),
@@ -94,7 +108,7 @@ export function useSalesReport() {
           .slice(0, 5)
       }
 
-      setReport({ todayRevenue, todayCount, weekRevenue, dailyRevenue, topProducts })
+      setReport({ todayRevenue, todayCount, weekRevenue, dailyRevenue, topProducts, todayByMethod })
       setLoading(false)
     }
 

@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { useAuth } from '@/context/AuthContext'
 import { useRefundHistory, createRefund } from '@/hooks/useRefunds'
 import { formatGHS } from '@/lib/currency'
+import { queueRefund } from '@/lib/offlineQueue'
 import type { TransactionRow } from '@/hooks/useTransactions'
 import {
   Dialog,
@@ -67,8 +68,18 @@ export default function RefundDialog({ sale, onClose, onRefunded }: RefundDialog
       toast.success('Refund recorded and stock restored')
       onRefunded()
       onClose()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to process refund')
+    } catch {
+      queueRefund({
+        localId: crypto.randomUUID(),
+        saleId: sale.id,
+        processedBy: profile?.id ?? null,
+        reason: reason.trim(),
+        lines: selectedLines,
+        createdAt: new Date().toISOString(),
+      })
+      toast.info('No connection — refund saved offline and will sync (stock updates once synced)')
+      onRefunded()
+      onClose()
     } finally {
       setSubmitting(false)
     }

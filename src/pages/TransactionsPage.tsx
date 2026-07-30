@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext'
 import { formatGHS } from '@/lib/currency'
 import { PAYMENT_LABELS } from '@/lib/payment'
 import RefundDialog from '@/components/pos/RefundDialog'
+import VoidSaleDialog from '@/components/pos/VoidSaleDialog'
 import type { SaleStatus } from '@/types/db'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -73,6 +74,7 @@ export default function TransactionsPage() {
   const [statusFilter, setStatusFilter] = useState<SaleStatus | 'all'>('all')
   const [selected, setSelected] = useState<TransactionRow | null>(null)
   const [refundTarget, setRefundTarget] = useState<TransactionRow | null>(null)
+  const [voidTarget, setVoidTarget] = useState<TransactionRow | null>(null)
   const canRefund = profile?.role === 'admin' || profile?.role === 'manager'
 
   const filtered = useMemo(() => {
@@ -178,6 +180,11 @@ export default function TransactionsPage() {
                     {canRefund && t.status === 'completed' && (
                       <Button size="sm" variant="destructive" onClick={() => setRefundTarget(t)}>
                         Refund
+                      </Button>
+                    )}
+                    {canRefund && t.status === 'completed' && (
+                      <Button size="sm" variant="outline" className="text-destructive" onClick={() => setVoidTarget(t)}>
+                        Void
                       </Button>
                     )}
                   </div>
@@ -288,19 +295,48 @@ export default function TransactionsPage() {
                 </div>
               </div>
 
+              {selected.status === 'voided' && (
+                <>
+                  <Separator />
+                  <div className="space-y-1 text-sm">
+                    <p className="font-medium text-destructive">Voided</p>
+                    {selected.void_reason && (
+                      <p className="text-xs text-muted-foreground">{selected.void_reason}</p>
+                    )}
+                    {selected.voided_at && (
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(selected.voided_at).toLocaleString('en-GH')}
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+
               <RefundHistory saleId={selected.id} />
 
               {canRefund && selected.status === 'completed' && (
-                <Button
-                  variant="destructive"
-                  className="w-full"
-                  onClick={() => {
-                    setRefundTarget(selected)
-                    setSelected(null)
-                  }}
-                >
-                  Process refund
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="destructive"
+                    className="flex-1"
+                    onClick={() => {
+                      setRefundTarget(selected)
+                      setSelected(null)
+                    }}
+                  >
+                    Process refund
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 text-destructive"
+                    onClick={() => {
+                      setVoidTarget(selected)
+                      setSelected(null)
+                    }}
+                  >
+                    Void sale
+                  </Button>
+                </div>
               )}
             </>
           )}
@@ -312,6 +348,14 @@ export default function TransactionsPage() {
           sale={refundTarget}
           onClose={() => setRefundTarget(null)}
           onRefunded={refresh}
+        />
+      )}
+
+      {voidTarget && (
+        <VoidSaleDialog
+          sale={voidTarget}
+          onClose={() => setVoidTarget(null)}
+          onVoided={refresh}
         />
       )}
     </div>

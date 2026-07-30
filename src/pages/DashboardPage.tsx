@@ -1,9 +1,10 @@
 import type { ComponentType } from 'react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { Wallet, Receipt, CalendarRange, TriangleAlert, TrendingUp, Trophy } from 'lucide-react'
+import { Wallet, Receipt, CalendarRange, TriangleAlert, TrendingUp, Trophy, Landmark } from 'lucide-react'
 import { useSalesReport } from '@/hooks/useSalesReport'
 import { useProducts } from '@/hooks/useProducts'
 import { formatGHS } from '@/lib/currency'
+import { PAYMENT_LABELS } from '@/lib/payment'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
@@ -126,6 +127,33 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Landmark className="size-4 text-chart-4" />
+            Today's till by payment method
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {report.todayByMethod.length === 0 && (
+            <p className="text-sm text-muted-foreground">No sales recorded today yet.</p>
+          )}
+          {report.todayByMethod.length > 0 && (
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+              {report.todayByMethod.map((m) => (
+                <div key={m.method} className="rounded-md border p-3">
+                  <p className="text-xs text-muted-foreground">{PAYMENT_LABELS[m.method]}</p>
+                  <p className="mt-1 text-lg font-semibold">{formatGHS(m.total)}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="mt-3 text-xs text-muted-foreground">
+            Use this to reconcile the cash drawer and mobile money accounts at close of day.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   )
 }

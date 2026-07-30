@@ -19,7 +19,7 @@ export function useTransactions() {
     setError(null)
     const { data, error } = await supabase
       .from('sales')
-      .select('*, cashier:profiles(full_name), items:sale_items(*)')
+      .select('*, cashier:profiles!cashier_id(full_name), items:sale_items(*)')
       .order('created_at', { ascending: false })
       .limit(PAGE_SIZE)
 

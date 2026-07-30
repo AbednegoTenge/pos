@@ -149,6 +149,26 @@ export default function CheckoutPage() {
     const receiptNo = generateReceiptNo()
     const createdAt = new Date().toISOString()
 
+    if (reference) {
+      try {
+        const { data: dupes } = await supabase
+          .from('sales')
+          .select('id')
+          .eq('payment_method', method)
+          .eq('payment_reference', reference)
+          .neq('status', 'voided')
+          .limit(1)
+        if (dupes && dupes.length > 0) {
+          toast.error('This payment reference has already been used on another sale')
+          setSubmitting(false)
+          return
+        }
+      } catch {
+        // Can't reach Supabase to check (likely offline) — don't block a
+        // legitimate sale on a check we can't perform right now.
+      }
+    }
+
     try {
       const { data: saleRow, error } = await supabase
         .from('sales')

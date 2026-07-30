@@ -6,6 +6,7 @@ import { useCategories } from '@/hooks/useCategories'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { formatGHS } from '@/lib/currency'
+import { queueProductSave } from '@/lib/offlineQueue'
 import type { Product } from '@/types/db'
 
 interface UnitFormRow {
@@ -133,44 +134,80 @@ export default function InventoryPage() {
       low_stock_threshold: Number(form.low_stock_threshold),
     }
 
-    const { data: productRow, error } = editing
-      ? await supabase.from('products').update(payload).eq('id', editing.id).select('id').single()
-      : await supabase.from('products').insert(payload).select('id').single()
+    const validUnits = units
+      .filter((u) => u.label.trim())
+      .map((u) => ({
+        id: u.id,
+        label: u.label.trim(),
+        conversion_qty: Number(u.conversion_qty),
+        price_ghs: Number(u.price_ghs),
+      }))
 
-    if (error || !productRow) {
-      toast.error(error?.message ?? 'Failed to save product')
+    let productId = editing?.id ?? null
+
+    try {
+      const { data: productRow, error } = productId
+        ? await supabase.from('products').update(payload).eq('id', productId).select('id').single()
+        : await supabase.from('products').insert(payload).select('id').single()
+
+      if (error || !productRow) throw error ?? new Error('Failed to save product')
+      productId = productRow.id
+    } catch {
+      queueProductSave({
+        localId: crypto.randomUUID(),
+        productId,
+        payload,
+        units: validUnits,
+        removedUnitIds,
+        createdAt: new Date().toISOString(),
+      })
+      toast.info('No connection — product saved offline and will sync automatically')
+      setDialogOpen(false)
+      refresh()
       setSaving(false)
       return
     }
 
-    const validUnits = units.filter((u) => u.label.trim())
-    const unitsError = (
-      await Promise.all([
-        removedUnitIds.length > 0
-          ? supabase.from('product_units').update({ is_active: false }).in('id', removedUnitIds)
-          : Promise.resolve({ error: null }),
-        ...validUnits.map((u) => {
-          const unitPayload = {
-            product_id: productRow.id,
-            label: u.label.trim(),
-            conversion_qty: Number(u.conversion_qty),
-            price_ghs: Number(u.price_ghs),
-            is_active: true,
-          }
-          return u.id
-            ? supabase.from('product_units').update(unitPayload).eq('id', u.id)
-            : supabase.from('product_units').insert(unitPayload)
-        }),
-      ])
-    ).find((r) => r.error)?.error
+    try {
+      const unitsError = (
+        await Promise.all([
+          removedUnitIds.length > 0
+            ? supabase.from('product_units').update({ is_active: false }).in('id', removedUnitIds)
+            : Promise.resolve({ error: null }),
+          ...validUnits.map((u) => {
+            const unitPayload = {
+              product_id: productId,
+              label: u.label,
+              conversion_qty: u.conversion_qty,
+              price_ghs: u.price_ghs,
+              is_active: true,
+            }
+            return u.id
+              ? supabase.from('product_units').update(unitPayload).eq('id', u.id)
+              : supabase.from('product_units').insert(unitPayload)
+          }),
+        ])
+      ).find((r) => r.error)?.error
 
-    if (unitsError) {
-      toast.error(unitsError.message)
-    } else {
+      if (unitsError) throw unitsError
       toast.success(editing ? 'Product updated' : 'Product added')
-      setDialogOpen(false)
-      refresh()
+    } catch {
+      // The product itself is already saved (productId is real); only the
+      // packaging changes need to be retried, as an update so it can't
+      // recreate the product.
+      queueProductSave({
+        localId: crypto.randomUUID(),
+        productId,
+        payload,
+        units: validUnits,
+        removedUnitIds,
+        createdAt: new Date().toISOString(),
+      })
+      toast.info('No connection — packaging changes queued and will sync automatically')
     }
+
+    setDialogOpen(false)
+    refresh()
     setSaving(false)
   }
 

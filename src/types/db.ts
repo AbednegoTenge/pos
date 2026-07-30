@@ -71,6 +71,9 @@ export interface Sale {
   status: SaleStatus
   synced: boolean
   created_at: string
+  void_reason: string | null
+  voided_by: string | null
+  voided_at: string | null
 }
 
 export interface SaleItem {
