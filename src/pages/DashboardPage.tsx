@@ -35,9 +35,9 @@ function StatTile({
         <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-lg', STAT_COLOR_CLASSES[color])}>
           <Icon className="size-5" />
         </span>
-        <div>
-          <p className="text-sm text-muted-foreground">{label}</p>
-          <p className="mt-1 text-2xl font-semibold">{value}</p>
+        <div className="min-w-0">
+          <p className="truncate text-sm text-muted-foreground">{label}</p>
+          <p className="mt-1 text-xl font-semibold break-words sm:text-2xl">{value}</p>
         </div>
       </CardContent>
     </Card>
