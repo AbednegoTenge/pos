@@ -96,7 +96,7 @@ export default function TransactionsPage() {
         <h1 className="text-2xl font-semibold">Transactions</h1>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -116,7 +116,7 @@ export default function TransactionsPage() {
           value={statusFilter}
           onValueChange={(v) => setStatusFilter(v as SaleStatus | 'all')}
         >
-          <SelectTrigger className="w-40">
+          <SelectTrigger className="w-full sm:w-40">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>

@@ -92,7 +92,7 @@ export default function SettingsPage() {
               <Label htmlFor="address">Address</Label>
               <Input id="address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone</Label>
                 <Input id="phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
@@ -114,7 +114,7 @@ export default function SettingsPage() {
             </label>
 
             {form.tax_enabled && (
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                 <div className="space-y-2">
                   <Label htmlFor="vat">VAT rate</Label>
                   <Input id="vat" type="number" step="0.001" value={form.vat_rate} onChange={(e) => setForm({ ...form, vat_rate: e.target.value })} />

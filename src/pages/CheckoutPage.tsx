@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
-import { Minus, Plus, Trash2, Search } from 'lucide-react'
+import { Minus, Plus, Trash2, Search, ShoppingCart } from 'lucide-react'
 import { toast } from 'sonner'
 import { useProducts } from '@/hooks/useProducts'
 import { useBusinessSettings } from '@/hooks/useBusinessSettings'
@@ -31,6 +31,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 
 export default function CheckoutPage() {
   const { products, loading, refresh } = useProducts()
@@ -41,6 +42,7 @@ export default function CheckoutPage() {
   const [cart, setCart] = useState<CartLine[]>([])
   const [discount, setDiscount] = useState(0)
   const [unitPickerProduct, setUnitPickerProduct] = useState<Product | null>(null)
+  const [cartOpen, setCartOpen] = useState(false)
   const [paymentOpen, setPaymentOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [completedSale, setCompletedSale] = useState<{
@@ -138,7 +140,83 @@ export default function CheckoutPage() {
   function resetCart() {
     setCart([])
     setDiscount(0)
+    setCartOpen(false)
   }
+
+  function renderCartLines() {
+    return (
+      <div className="flex-1 space-y-2 overflow-y-auto p-4">
+        {cart.length === 0 && (
+          <p className="mt-8 text-center text-sm text-muted-foreground">Cart is empty</p>
+        )}
+        {cart.map((line) => (
+          <div key={cartLineKey(line)} className="flex items-center gap-2 rounded-md border p-2">
+            <div className="flex-1">
+              <p className="text-sm font-medium">{line.product.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {formatGHS(cartLineUnitPrice(line))} × {line.quantity} {cartLineUnitLabel(line)}
+              </p>
+            </div>
+            <Button size="icon" variant="outline" className="size-7" onClick={() => updateQuantity(line, -1)}>
+              <Minus className="size-3" />
+            </Button>
+            <span className="w-6 text-center text-sm">{line.quantity}</span>
+            <Button size="icon" variant="outline" className="size-7" onClick={() => updateQuantity(line, 1)}>
+              <Plus className="size-3" />
+            </Button>
+            <Button size="icon" variant="ghost" className="size-7 text-destructive" onClick={() => removeLine(line)}>
+              <Trash2 className="size-3" />
+            </Button>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  function renderCartSummary() {
+    return (
+      <div className="space-y-2 border-t p-4 text-sm">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-muted-foreground">Discount (GHS)</span>
+          <Input
+            type="number"
+            min={0}
+            step="0.01"
+            value={discount || ''}
+            onChange={(e) => setDiscount(Number(e.target.value) || 0)}
+            className="h-7 w-24 text-right"
+          />
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Subtotal</span>
+          <span>{formatGHS(totals.subtotal)}</span>
+        </div>
+        {totals.vat + totals.nhil + totals.getfund + totals.covidLevy > 0 && (
+          <div className="flex justify-between text-muted-foreground">
+            <span>VAT + Levies</span>
+            <span>{formatGHS(totals.vat + totals.nhil + totals.getfund + totals.covidLevy)}</span>
+          </div>
+        )}
+        <div className="flex justify-between text-base font-bold">
+          <span>Total</span>
+          <span>{formatGHS(totals.total)}</span>
+        </div>
+        <Button
+          className="w-full"
+          size="lg"
+          disabled={cart.length === 0}
+          onClick={() => {
+            setCartOpen(false)
+            setPaymentOpen(true)
+          }}
+        >
+          Charge {formatGHS(totals.total)}
+        </Button>
+      </div>
+    )
+  }
+
+  const cartItemCount = cart.reduce((sum, line) => sum + line.quantity, 0)
 
   async function handleConfirmPayment(
     method: PaymentMethod,
@@ -236,8 +314,8 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="grid h-full grid-cols-3 gap-6">
-      <div className="col-span-2 flex flex-col gap-4">
+    <div className="flex flex-col gap-4 lg:grid lg:h-full lg:grid-cols-3 lg:gap-6">
+      <div className="flex flex-col gap-4 lg:col-span-2">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -249,7 +327,7 @@ export default function CheckoutPage() {
           />
         </div>
 
-        <div className="grid flex-1 auto-rows-min grid-cols-3 gap-3 overflow-y-auto pb-4 lg:grid-cols-4">
+        <div className="grid flex-1 auto-rows-min grid-cols-2 gap-3 overflow-y-auto pb-24 sm:grid-cols-3 lg:grid-cols-4 lg:pb-4">
           {loading && <p className="col-span-full text-muted-foreground">Loading products…</p>}
           {!loading && filteredProducts.length === 0 && (
             <p className="col-span-full text-muted-foreground">No products found.</p>
@@ -286,64 +364,35 @@ export default function CheckoutPage() {
         </div>
       </div>
 
-      <div className="flex flex-col rounded-lg border bg-card">
-        <div className="flex-1 space-y-2 overflow-y-auto p-4">
-          {cart.length === 0 && (
-            <p className="mt-8 text-center text-sm text-muted-foreground">Cart is empty</p>
-          )}
-          {cart.map((line) => (
-            <div key={cartLineKey(line)} className="flex items-center gap-2 rounded-md border p-2">
-              <div className="flex-1">
-                <p className="text-sm font-medium">{line.product.name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {formatGHS(cartLineUnitPrice(line))} × {line.quantity} {cartLineUnitLabel(line)}
-                </p>
-              </div>
-              <Button size="icon" variant="outline" className="size-7" onClick={() => updateQuantity(line, -1)}>
-                <Minus className="size-3" />
-              </Button>
-              <span className="w-6 text-center text-sm">{line.quantity}</span>
-              <Button size="icon" variant="outline" className="size-7" onClick={() => updateQuantity(line, 1)}>
-                <Plus className="size-3" />
-              </Button>
-              <Button size="icon" variant="ghost" className="size-7 text-destructive" onClick={() => removeLine(line)}>
-                <Trash2 className="size-3" />
-              </Button>
-            </div>
-          ))}
-        </div>
-
-        <div className="space-y-2 border-t p-4 text-sm">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-muted-foreground">Discount (GHS)</span>
-            <Input
-              type="number"
-              min={0}
-              step="0.01"
-              value={discount || ''}
-              onChange={(e) => setDiscount(Number(e.target.value) || 0)}
-              className="h-7 w-24 text-right"
-            />
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Subtotal</span>
-            <span>{formatGHS(totals.subtotal)}</span>
-          </div>
-          {totals.vat + totals.nhil + totals.getfund + totals.covidLevy > 0 && (
-            <div className="flex justify-between text-muted-foreground">
-              <span>VAT + Levies</span>
-              <span>{formatGHS(totals.vat + totals.nhil + totals.getfund + totals.covidLevy)}</span>
-            </div>
-          )}
-          <div className="flex justify-between text-base font-bold">
-            <span>Total</span>
-            <span>{formatGHS(totals.total)}</span>
-          </div>
-          <Button className="w-full" size="lg" disabled={cart.length === 0} onClick={() => setPaymentOpen(true)}>
-            Charge {formatGHS(totals.total)}
-          </Button>
-        </div>
+      <div className="hidden flex-col rounded-lg border bg-card lg:flex">
+        {renderCartLines()}
+        {renderCartSummary()}
       </div>
+
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-card p-3 lg:hidden">
+        <Button
+          variant="outline"
+          className="w-full justify-between"
+          size="lg"
+          onClick={() => setCartOpen(true)}
+        >
+          <span className="flex items-center gap-2">
+            <ShoppingCart className="size-4" />
+            {cartItemCount > 0 ? `${cartItemCount} item${cartItemCount === 1 ? '' : 's'}` : 'Cart is empty'}
+          </span>
+          <span className="font-semibold">{formatGHS(totals.total)}</span>
+        </Button>
+      </div>
+
+      <Sheet open={cartOpen} onOpenChange={setCartOpen}>
+        <SheetContent side="bottom" className="flex h-[85vh] flex-col p-0">
+          <SheetHeader className="border-b">
+            <SheetTitle>Cart</SheetTitle>
+          </SheetHeader>
+          {renderCartLines()}
+          {renderCartSummary()}
+        </SheetContent>
+      </Sheet>
 
       <PaymentDialog
         open={paymentOpen}

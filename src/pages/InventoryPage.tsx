@@ -303,8 +303,8 @@ export default function InventoryPage() {
           <DialogHeader>
             <DialogTitle>{editing ? 'Edit product' : 'Add product'}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
-            <div className="col-span-2 space-y-2">
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2 space-y-2">
               <Label htmlFor="name">Name</Label>
               <Input id="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
             </div>
@@ -364,7 +364,7 @@ export default function InventoryPage() {
               <Input id="threshold" type="number" step="0.01" min={0} value={form.low_stock_threshold} onChange={(e) => setForm({ ...form, low_stock_threshold: e.target.value })} />
             </div>
 
-            <label className="col-span-2 flex items-center gap-2 text-sm">
+            <label className="sm:col-span-2 flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={form.vat_exempt}
@@ -374,7 +374,7 @@ export default function InventoryPage() {
               VAT-exempt item
             </label>
 
-            <div className="col-span-2 space-y-2 border-t pt-4">
+            <div className="sm:col-span-2 space-y-2 border-t pt-4">
               <div className="flex items-center justify-between">
                 <Label>Other packagings</Label>
                 <Button type="button" size="sm" variant="outline" onClick={addUnitRow}>
@@ -387,7 +387,7 @@ export default function InventoryPage() {
                 one deducts {form.unit || 'base unit'}s from the same stock count.
               </p>
               {units.map((row, i) => (
-                <div key={row.id ?? i} className="flex items-end gap-2">
+                <div key={row.id ?? i} className="flex flex-col gap-2 rounded-md border p-2 sm:flex-row sm:items-end sm:border-0 sm:p-0">
                   <div className="flex-1 space-y-1">
                     <Label className="text-xs">Label</Label>
                     <Input
@@ -396,40 +396,42 @@ export default function InventoryPage() {
                       placeholder="Box of 24"
                     />
                   </div>
-                  <div className="w-24 space-y-1">
-                    <Label className="text-xs">= {form.unit || 'units'}</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={row.conversion_qty}
-                      onChange={(e) => updateUnitRow(i, { conversion_qty: e.target.value })}
-                    />
+                  <div className="flex gap-2">
+                    <div className="flex-1 space-y-1 sm:w-24 sm:flex-none">
+                      <Label className="text-xs">= {form.unit || 'units'}</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={row.conversion_qty}
+                        onChange={(e) => updateUnitRow(i, { conversion_qty: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex-1 space-y-1 sm:w-28 sm:flex-none">
+                      <Label className="text-xs">Price (GHS)</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={row.price_ghs}
+                        onChange={(e) => updateUnitRow(i, { price_ghs: e.target.value })}
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="mt-auto text-destructive"
+                      onClick={() => removeUnitRow(i)}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
                   </div>
-                  <div className="w-28 space-y-1">
-                    <Label className="text-xs">Price (GHS)</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={row.price_ghs}
-                      onChange={(e) => updateUnitRow(i, { price_ghs: e.target.value })}
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="text-destructive"
-                    onClick={() => removeUnitRow(i)}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
                 </div>
               ))}
             </div>
 
-            <DialogFooter className="col-span-2">
+            <DialogFooter className="sm:col-span-2">
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                 Cancel
               </Button>
