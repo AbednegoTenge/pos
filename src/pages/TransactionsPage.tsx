@@ -106,7 +106,16 @@ export default function TransactionsPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as SaleStatus | 'all')}>
+        <Select
+          items={[
+            { value: 'all', label: 'All statuses' },
+            { value: 'completed', label: 'Completed' },
+            { value: 'refunded', label: 'Refunded' },
+            { value: 'voided', label: 'Voided' },
+          ]}
+          value={statusFilter}
+          onValueChange={(v) => setStatusFilter(v as SaleStatus | 'all')}
+        >
           <SelectTrigger className="w-40">
             <SelectValue placeholder="Status" />
           </SelectTrigger>

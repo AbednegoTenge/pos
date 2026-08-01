@@ -312,6 +312,7 @@ export default function InventoryPage() {
             <div className="space-y-2">
               <Label>Category</Label>
               <Select
+                items={categories.map((c) => ({ value: c.id, label: c.name }))}
                 value={form.category_id || undefined}
                 onValueChange={(v) => setForm({ ...form, category_id: v ?? '' })}
               >

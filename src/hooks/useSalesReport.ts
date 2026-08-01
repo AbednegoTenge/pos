@@ -7,10 +7,15 @@ export interface DailyRevenue {
   total: number
 }
 
+export interface TopProductLine {
+  label: string
+  quantity: number
+}
+
 export interface TopProduct {
   name: string
   revenue: number
-  quantity: number
+  breakdown: TopProductLine[]
 }
 
 export interface PaymentMethodTotal {
@@ -86,24 +91,39 @@ export function useSalesReport() {
       if (saleIds.length > 0) {
         const { data: items } = await supabase
           .from('sale_items')
-          .select('product_name, line_total_ghs, quantity')
+          .select(
+            'product_name, line_total_ghs, quantity, product_unit:product_units(label), product:products(unit)',
+          )
           .in('sale_id', saleIds)
 
-        const byProduct = new Map<string, TopProduct>()
+        // A product sold both loose and by packaging (e.g. "Box of 10") has
+        // differently-sized units, so quantities can't just be added together
+        // — keep a separate running total per packaging label and let the
+        // Dashboard show e.g. "2 pc + 1 Box of 10 sold" instead of a merged,
+        // ambiguous number.
+        const byProduct = new Map<string, { revenue: number; breakdown: Map<string, number> }>()
         for (const item of items ?? []) {
+          const label =
+            (item.product_unit as unknown as { label: string } | null)?.label ??
+            (item.product as unknown as { unit: string } | null)?.unit ??
+            ''
           const existing = byProduct.get(item.product_name)
           if (existing) {
             existing.revenue += item.line_total_ghs
-            existing.quantity += item.quantity
+            existing.breakdown.set(label, (existing.breakdown.get(label) ?? 0) + item.quantity)
           } else {
             byProduct.set(item.product_name, {
-              name: item.product_name,
               revenue: item.line_total_ghs,
-              quantity: item.quantity,
+              breakdown: new Map([[label, item.quantity]]),
             })
           }
         }
-        topProducts = Array.from(byProduct.values())
+        topProducts = Array.from(byProduct.entries())
+          .map(([name, v]) => ({
+            name,
+            revenue: v.revenue,
+            breakdown: Array.from(v.breakdown.entries()).map(([label, quantity]) => ({ label, quantity })),
+          }))
           .sort((a, b) => b.revenue - a.revenue)
           .slice(0, 5)
       }

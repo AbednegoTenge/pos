@@ -119,7 +119,9 @@ export default function DashboardPage() {
               <div key={p.name} className="flex items-center justify-between text-sm">
                 <div>
                   <p className="font-medium">{p.name}</p>
-                  <p className="text-xs text-muted-foreground">{p.quantity} sold</p>
+                  <p className="text-xs text-muted-foreground">
+                    {p.breakdown.map((b) => `${b.quantity} ${b.label}`).join(' + ')} sold
+                  </p>
                 </div>
                 <span className="font-semibold">{formatGHS(p.revenue)}</span>
               </div>
